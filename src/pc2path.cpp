@@ -29,7 +29,7 @@ private:
     Eigen::Vector4f centroid;
     void get_center(pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr);
     void cutpc(pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr);
-    void getleftbound(bool);
+    pcl::PointXYZRGBNormal initgetleftbound();
     void extract_indices();
 
 public:
@@ -37,7 +37,7 @@ public:
     ~pc2path();
     bool readpcd(std::string);
     bool getcloud(pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr);
-    void showpc(pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr);
+    void showpc(pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr,pcl::PointXYZRGBNormal);
     void pathplanning(void);
     
 };
@@ -71,14 +71,18 @@ bool pc2path::getcloud(pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr outcloud){
     }
 }
 
-void pc2path::showpc(pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr showpc){
-    get_center(showpc);
+void pc2path::showpc(pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr showpc,pcl::PointXYZRGBNormal colorpoint){
+    // get_center(showpc);
     // pcl::PointXYZRGBNormal tempc;
     // tempc.x=centroid[0];
     // tempc.y=centroid[1];
     // tempc.z=centroid[2];
     // tempc.g=255;
     // showpc->push_back(tempc);
+    if(colorpoint){
+        printf("show color\n");
+        showpc->push_back(colorpoint);
+    }
 
     pcl::visualization::PCLVisualizer vis3 ("VOXELIZED SAMPLES CLOUD");
     vis3.addPointCloud<pcl::PointXYZRGBNormal> (showpc);
@@ -93,7 +97,10 @@ void pc2path::get_center(pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr cloud){
 		 << "(" << centroid[0] << ", " << centroid[1] << ", " << centroid[2] << ")" << endl;
 	
 }
+
 void pc2path::cutpc(pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr cloud){
+    // get cloud centroid
+    get_center(cloud); 
     // translation of pointcloud
     Eigen::Matrix4f transform = Eigen::Matrix4f::Identity();
     transform(0,3) = -1*centroid[0];
@@ -104,7 +111,7 @@ void pc2path::cutpc(pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr cloud){
     // cut pointcloud    
     pcl::PassThrough<pcl::PointXYZRGBNormal> pass; // 声明直通滤波
 	pass.setInputCloud(cloud); // 传入点云数据
-	pass.setFilterFieldName("y"); // 设置操作的坐标轴
+	pass.setFilterFieldName("z"); // 设置操作的坐标轴
 	pass.setFilterLimits(0.0, centroid(1)*2); // 设置坐标范围
 	// pass.setFilterLimitsNegative(true); // 保留数据函数
 	pass.filter(*cloud);  // 进行滤波输出
@@ -145,25 +152,53 @@ void pc2path::extract_indices(){
 
 }
 
-void pc2path::getleftbound(bool initflag){
-    // 1 for init, 0 for find ellipse left boundary
-    if(initflag){
-        // find top of surface
-        extract_indices(); 
-        // find min lefg point
-    }
-    else{
+float pc2path::distanceXY(pcl::PointXYZRGBNormal point){
+    return std::sqrt((point.x-centroid.x)*(point.x-centroid.x) + (point.y-centroid.y)*(point.y-centroid.y) );
+}
 
+pcl::PointXYZRGBNormal pc2path::initgetleftbound(){
+    // find top of surface
+    extract_indices(); 
+    get_center(cloud);
+    // find min left point
+    // find min x, then find max y (II quadrant)
+    // only consider X-Y plane
+    pcl::PointXYZRGBNormal startpoint = new pcl::PointXYZRGBNormal;
+    pcl::PointXYZRGBNormal minPt, maxPt;
+    pcl::getMinMax3D (*cloud, minPt, maxPt);
+    std::vector<pcl::PointXYZRGBNormal> vpoint;
+    for (int i = 0; i < cloud->points.size(); i++)
+    {
+        if(  cloud->points[i].x < minPt.x + 0.01){
+            vpoint.push_back(cloud->points[i]);
+        }
     }
-
+    float pointy=0.0;
+    for (int i = 0; i < vpoint.size(); i++)
+    {
+        if( cloud->points[i].y > pointy){
+            pointy = cloud->points[i].y;
+            startpoint.x = cloud->points[i].x;
+            startpoint.y = cloud->points[i].y;
+            startpoint.z = cloud->points[i].z;
+            startpoint.r = cloud->points[i].r;
+            startpoint.g = cloud->points[i].g;
+            startpoint.b = cloud->points[i].b;
+            startpoint.n_x = cloud->points[i].n_x;
+            startpoint.n_y = cloud->points[i].n_y;
+            startpoint.n_z = cloud->points[i].n_z;
+            startpoint.curvature = cloud->points[i].curvature;
+        }
+    }
+    return startpoint;
 }
 
 void pc2path::pathplanning(){
-    get_center(cloud); // get cloud centroid
 	// make new pc without bias, and find the top of surface
     cutpc(cloud);
     // find left point boundary
-    getleftbound(1);
+    pcl::PointXYZRGBNormal initleftpoint;
+    initleftpoint = initgetleftbound();
 }
 
 
@@ -181,7 +216,7 @@ int main(int argc, char **argv)
     
     plan.pathplanning();
     plan.getcloud(readpc);
-    plan.showpc(readpc);
+    plan.showpc(readpc,NULL);
     
 
     return 0;
