@@ -16,3 +16,6 @@ target_link_libraries (pcl_stl_sample ${PCL_LIBRARIES})
 
 add_executable (extract_indices src/extract_indices.cpp)
 target_link_libraries (extract_indices ${PCL_LIBRARIES})
+
+add_executable (viewer src/viewer.cpp)
+target_link_libraries (viewer ${PCL_LIBRARIES})
