@@ -37,7 +37,7 @@ public:
     ~pc2path();
     bool readpcd(std::string);
     bool getcloud(pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr);
-    void showpc(pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr,pcl::PointXYZRGBNormal);
+    void showpc(pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr);
     void pathplanning(void);
     
 };
@@ -58,6 +58,7 @@ bool pc2path::readpcd(std::string filename){
         PCL_ERROR("Cloudn't read file!");
         return 0;
     }
+    printf("cloud size %ld\n",cloud->points.size());
     return 1;
 }
 
@@ -71,7 +72,7 @@ bool pc2path::getcloud(pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr outcloud){
     }
 }
 
-void pc2path::showpc(pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr showpc,pcl::PointXYZRGBNormal colorpoint){
+void pc2path::showpc(pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr showpc){
     // get_center(showpc);
     // pcl::PointXYZRGBNormal tempc;
     // tempc.x=centroid[0];
@@ -79,16 +80,22 @@ void pc2path::showpc(pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr showpc,pcl::Po
     // tempc.z=centroid[2];
     // tempc.g=255;
     // showpc->push_back(tempc);
-    if(colorpoint){
-        printf("show color\n");
-        showpc->push_back(colorpoint);
-    }
+    // if(colorpoint){
+    //     printf("show color\n");
+    //     showpc->push_back(colorpoint);
+    // }
 
     pcl::visualization::PCLVisualizer vis3 ("VOXELIZED SAMPLES CLOUD");
-    vis3.addPointCloud<pcl::PointXYZRGBNormal> (showpc);
-    // vis3.addPointCloudNormals<pcl::PointXYZRGBNormal> (showpc, 5, 0.2f, "cloud_normals");
-    // vis3.setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 5, "VOXELIZED SAMPLES CLOUD");  // fail
-    vis3.spin ();   
+    vis3.addPointCloud<pcl::PointXYZRGBNormal> (showpc,"sample_cloud");
+    vis3.addPointCloudNormals<pcl::PointXYZRGBNormal> (showpc, 5, 0.2f, "cloud_normals");
+    
+    vis3.setBackgroundColor(0, 0, 0);		//窗口背景色，默认[0,0,0]，范围[0~255,0~255,0~255]
+	// vis3.setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 1, "sample_cloud");			//设置点的大小，默认 1
+	vis3.setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_COLOR, 1, 0., 0., "sample_cloud");	//设置点云显示的颜色，rgb 在 [0,1] 范围
+	// vis3.setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_OPACITY, 0.5, "sample_cloud");			//设置点云透明度，默认 1 【Float going from 0.0 (transparent) to 1.0 (opaque)】
+	vis3.addCoordinateSystem (100.0);
+    // vis3.initCameraParameters ();
+    vis3.spin (); 
 }
 
 void pc2path::get_center(pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr cloud){
@@ -112,7 +119,7 @@ void pc2path::cutpc(pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr cloud){
     pcl::PassThrough<pcl::PointXYZRGBNormal> pass; // 声明直通滤波
 	pass.setInputCloud(cloud); // 传入点云数据
 	pass.setFilterFieldName("z"); // 设置操作的坐标轴
-	pass.setFilterLimits(0.0, centroid(1)*2); // 设置坐标范围
+	pass.setFilterLimits(0.0, centroid(2)*2); // 设置坐标范围
 	// pass.setFilterLimitsNegative(true); // 保留数据函数
 	pass.filter(*cloud);  // 进行滤波输出
 }
@@ -129,9 +136,9 @@ void pc2path::extract_indices(){
     seg.setInputNormals(cloud);
     seg.setModelType(pcl::SACMODEL_NORMAL_PLANE);
     seg.setMethodType(pcl::SAC_RANSAC);
-    seg.setDistanceThreshold(0.05); 
+    seg.setDistanceThreshold(0.1); 
     seg.setOptimizeCoefficients(true);
-    seg.setRadiusLimits(0.1, 0.15);
+    seg.setRadiusLimits(0.1, 0.2);
     seg.setEpsAngle(100 / (180/3.141592654));
     seg.setMaxIterations(1000000);
 
@@ -152,9 +159,7 @@ void pc2path::extract_indices(){
 
 }
 
-float pc2path::distanceXY(pcl::PointXYZRGBNormal point){
-    return std::sqrt((point.x-centroid.x)*(point.x-centroid.x) + (point.y-centroid.y)*(point.y-centroid.y) );
-}
+
 
 pcl::PointXYZRGBNormal pc2path::initgetleftbound(){
     // find top of surface
@@ -163,7 +168,7 @@ pcl::PointXYZRGBNormal pc2path::initgetleftbound(){
     // find min left point
     // find min x, then find max y (II quadrant)
     // only consider X-Y plane
-    pcl::PointXYZRGBNormal startpoint = new pcl::PointXYZRGBNormal;
+    pcl::PointXYZRGBNormal startpoint ;
     pcl::PointXYZRGBNormal minPt, maxPt;
     pcl::getMinMax3D (*cloud, minPt, maxPt);
     std::vector<pcl::PointXYZRGBNormal> vpoint;
@@ -184,9 +189,9 @@ pcl::PointXYZRGBNormal pc2path::initgetleftbound(){
             startpoint.r = cloud->points[i].r;
             startpoint.g = cloud->points[i].g;
             startpoint.b = cloud->points[i].b;
-            startpoint.n_x = cloud->points[i].n_x;
-            startpoint.n_y = cloud->points[i].n_y;
-            startpoint.n_z = cloud->points[i].n_z;
+            startpoint.normal_x = cloud->points[i].normal_x;
+            startpoint.normal_y = cloud->points[i].normal_y;
+            startpoint.normal_z = cloud->points[i].normal_z;
             startpoint.curvature = cloud->points[i].curvature;
         }
     }
@@ -216,7 +221,7 @@ int main(int argc, char **argv)
     
     plan.pathplanning();
     plan.getcloud(readpc);
-    plan.showpc(readpc,NULL);
+    plan.showpc(readpc);
     
 
     return 0;
